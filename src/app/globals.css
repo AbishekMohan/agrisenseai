@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 135 40% 98%;
+    --foreground: 135 40% 5%;
+    --card: 0 0% 100%;
+    --card-foreground: 135 40% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 135 40% 10%;
+    --primary: 135 40% 28%;
+    --primary-foreground: 135 40% 98%;
+    --secondary: 135 25% 94%;
+    --secondary-foreground: 135 40% 28%;
+    --muted: 135 15% 94%;
+    --muted-foreground: 135 15% 40%;
+    --accent: 38 90% 58%;
+    --accent-foreground: 135 40% 5%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 135 20% 90%;
+    --input: 135 20% 90%;
+    --ring: 135 40% 28%;
+    --radius: 1.5rem;
+  }
+
+  .dark {
+    --background: 135 45% 4%;
+    --foreground: 135 20% 96%;
+    --card: 135 45% 6%;
+    --card-foreground: 135 20% 96%;
+    --popover: 135 45% 6%;
+    --popover-foreground: 135 20% 96%;
+    --primary: 135 45% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 135 40% 10%;
+    --secondary-foreground: 135 20% 90%;
+    --muted: 135 40% 12%;
+    --muted-foreground: 135 15% 65%;
+    --accent: 38 90% 58%;
+    --accent-foreground: 135 40% 5%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 135 40% 14%;
+    --input: 135 40% 14%;
+    --ring: 135 45% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground transition-all duration-500 ease-in-out;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.glass {
+  @apply bg-card/60 backdrop-blur-xl border border-white/20 dark:border-white/5;
+}
+
+.health-gradient-excellent {
+  background: linear-gradient(135deg, #2d5a27 0%, #4a7c44 100%);
+}
+
+.health-gradient-warning {
+  background: linear-gradient(135deg, #9b2226 0%, #d62828 100%);
+}
+
+.text-glow {
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+}
+
+.shadow-premium {
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.1);
+}
+
+.active-scale {
+  @apply transition-transform active:scale-95 duration-200;
+}
+
+/* Custom scrollbar for a cleaner mobile look */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}

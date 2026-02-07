@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+  # Netlify’s managed Next.js Runtime v5 (OpenNext-based) requires Node 18+.
+  # We pin to 20.x for parity with Next.js 15 defaults and to match Netlify’s
+  # current build image.
+  [build.environment]
+    NODE_VERSION = "20"
