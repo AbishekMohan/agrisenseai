@@ -1,4 +1,4 @@
-import { ai } from '@/ai/genkit';
+import { ai, generateWithFallback, type GeminiModel } from '@/ai/genkit';
 import { z } from 'genkit';
 
 const GeneratePersonalizedRecommendationsInputSchema = z.object({
@@ -51,58 +51,39 @@ const generatePersonalizedRecommendationsFlow = ai.defineFlow(
     outputSchema: GeneratePersonalizedRecommendationsOutputSchema,
   },
   async input => {
-    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    try {
+      // Use generateWithFallback to automatically try different models on rate limits
+      // Fallback order: Gemini 3 Flash → 2.5 Flash → 2.5 Flash Lite
+      return await generateWithFallback(async (model: GeminiModel) => {
+        const { output } = await prompt(input, { model });
+        if (!output || output.length === 0) throw new Error('AI failed to generate recommendations.');
+        return output as GeneratePersonalizedRecommendationsOutput;
+      });
+    } catch (error: any) {
+      console.error('Error in recommendations flow:', error);
 
-    // Keep retries short so users aren't forced to wait ~16s for free-tier throttling.
-    const maxAttempts = 3;
-    const baseDelay = 1500; // ms
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const { output } = await prompt(input);
-        if (output && output.length > 0) return output;
-      } catch (error: any) {
-        const message = error?.message?.toLowerCase?.() ?? '';
-        const isRateLimit =
-          message.includes('quota') ||
-          message.includes('limit') ||
-          message.includes('429') ||
-          message.includes('rate');
-
-        if (isRateLimit && attempt < maxAttempts) {
-          const delay = baseDelay * attempt; // 1.5s, 3s
-          console.warn(`Rate limit hit; retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
-          await sleep(delay);
-          continue;
+      // Safe, fast fallback so the UI keeps working without long waits
+      return [
+        {
+          priority: 'High' as const,
+          icon: '💧',
+          title: 'Manual Moisture Check',
+          action: 'Quickly check soil moisture near roots and water if under 65%.'
+        },
+        {
+          priority: 'Medium' as const,
+          icon: '🌾',
+          title: 'Routine Check',
+          action: 'Sensor data looks typical. Continue standard irrigation cycles.'
+        },
+        {
+          priority: 'Low' as const,
+          icon: '☀️',
+          title: 'Weather Watch',
+          action: 'Monitor forecast; delay irrigation if heavy rain is expected.'
         }
-        console.error('Error in recommendations flow:', error);
-      }
-
-      // If output was empty or we decided not to retry, break and return fallback
-      break;
+      ];
     }
-
-    // Safe, fast fallback so the UI keeps working without long waits
-    return [
-      {
-        priority: 'High' as const,
-        icon: '💧',
-        title: 'Manual Moisture Check',
-        action: 'Quickly check soil moisture near roots and water if under 65%.'
-      },
-      {
-        priority: 'Medium' as const,
-        icon: '🌾',
-        title: 'Routine Check',
-        action: 'Sensor data looks typical. Continue standard irrigation cycles.'
-      },
-      {
-        priority: 'Low' as const,
-        icon: '☀️',
-        title: 'Weather Watch',
-        action: 'Monitor today’s forecast; delay irrigation if heavy rain is expected.'
-      }
-    ];
   }
 );
 

@@ -8,35 +8,72 @@ const geminiApiKey =
   process.env.GEMINI_API_KEY ||
   process.env.GOOGLE_API_KEY;
 
-// Available Gemini models for rotation to distribute API calls
+// Models in fallback order: Gemini 3 Flash → 2.5 Flash → 2.5 Flash Lite
 export const GEMINI_MODELS = [
-  'googleai/gemini-2.5-flash-lite',
   'googleai/gemini-3-flash-preview',
   'googleai/gemini-2.5-flash',
+  'googleai/gemini-2.5-flash-lite',
 ] as const;
 
-// Simple round-robin model selector
-let modelIndex = 0;
-export function getNextModel(): string {
-  const model = GEMINI_MODELS[modelIndex];
-  modelIndex = (modelIndex + 1) % GEMINI_MODELS.length;
-  return model;
+export type GeminiModel = typeof GEMINI_MODELS[number];
+
+// Helper to check if an error is a rate limit error
+export function isRateLimitError(error: any): boolean {
+  const message = error?.message?.toLowerCase?.() ?? '';
+  return (
+    message.includes('quota') ||
+    message.includes('limit') ||
+    message.includes('429') ||
+    message.includes('rate') ||
+    message.includes('resource_exhausted')
+  );
 }
 
-// Get a specific model by name
-export function getModel(name: 'flash-lite' | 'flash-3' | 'flash-2.5'): string {
-  switch (name) {
-    case 'flash-lite':
-      return 'googleai/gemini-2.5-flash-lite';
-    case 'flash-3':
-      return 'googleai/gemini-3-flash-preview';
-    case 'flash-2.5':
-      return 'googleai/gemini-2.5-flash';
+// Generate with automatic model fallback and robust retries
+// Tries each model in order. If all fail (rate limited), waits and tries the set again.
+export async function generateWithFallback<T>(
+  generateFn: (model: GeminiModel) => Promise<T>,
+  maxRetries: number = 3
+): Promise<T> {
+  let lastError: any;
+  const baseDelay = 2000; // 2 seconds
+
+  // Outer loop: Retry rounds (e.g. 3 rounds of trying all models)
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+
+    // Inner loop: Try each model in the fallback chain
+    for (const model of GEMINI_MODELS) {
+      try {
+        console.log(`Attempt ${attempt}: Trying model: ${model}`);
+        return await generateFn(model);
+      } catch (error: any) {
+        lastError = error;
+
+        if (isRateLimitError(error)) {
+          console.warn(`Model ${model} rate limited.`);
+          continue; // Try next model immediately
+        }
+
+        // For non-rate-limit errors (like invalid input), throw immediately
+        throw error;
+      }
+    }
+
+    // If we're here, ALL models in this round were rate limited.
+    if (attempt < maxRetries) {
+      const delay = baseDelay * attempt; // Linear backoff: 2s, 4s, 6s...
+      console.warn(`All models rate limited in round ${attempt}. Waiting ${delay}ms before retrying...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
+
+  // All rounds failed
+  console.error('All models and retries exhausted:', lastError);
+  throw lastError;
 }
 
 export const ai = genkit({
   plugins: [googleAI({ apiKey: geminiApiKey })],
-  // Allow overriding model via env; default to rotating between all three models
-  model: process.env.GENKIT_MODEL || getNextModel(),
+  // Default model (first in the fallback chain)
+  model: process.env.GENKIT_MODEL || GEMINI_MODELS[0],
 });

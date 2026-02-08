@@ -1,5 +1,5 @@
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai, generateWithFallback, type GeminiModel } from '@/ai/genkit';
+import { z } from 'genkit';
 
 const AnswerFarmingQuestionsInputSchema = z.object({
   question: z.string().describe('The farming-related question to be answered.'),
@@ -14,8 +14,8 @@ export type AnswerFarmingQuestionsOutput = z.infer<typeof AnswerFarmingQuestions
 
 const prompt = ai.definePrompt({
   name: 'answerFarmingQuestionsPrompt',
-  input: {schema: AnswerFarmingQuestionsInputSchema},
-  output: {schema: AnswerFarmingQuestionsOutputSchema},
+  input: { schema: AnswerFarmingQuestionsInputSchema },
+  output: { schema: AnswerFarmingQuestionsOutputSchema },
   system: 'You are a helpful AI assistant for farmers in India. Provide precise, helpful, and empathetic answers to agricultural queries in the requested language.',
   prompt: `You are a helpful AI assistant for farmers in India. 
   Answer the following question about farming, crops, and farm management.
@@ -34,40 +34,19 @@ const answerFarmingQuestionsViaChatFlow = ai.defineFlow(
     outputSchema: AnswerFarmingQuestionsOutputSchema,
   },
   async input => {
-    // Small retry loop to smooth over transient 429/quota throttles.
-    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
-    const maxAttempts = 3;
-    const baseDelay = 2000; // ms
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const {output} = await prompt(input);
+    try {
+      // Use generateWithFallback to automatically try different models on rate limits
+      // Fallback order: Gemini 3 Flash → 2.5 Flash → 2.5 Flash Lite
+      return await generateWithFallback(async (model: GeminiModel) => {
+        const { output } = await prompt(input, { model });
         if (!output) throw new Error('AI failed to generate a response.');
-        return output;
-      } catch (error: any) {
-        const message = error?.message?.toLowerCase?.() ?? '';
-        const isRateLimit =
-          message.includes('quota') ||
-          message.includes('limit') ||
-          message.includes('429') ||
-          message.includes('rate');
-
-        if (isRateLimit && attempt < maxAttempts) {
-          const delay = baseDelay * attempt; // 2s, 4s
-          console.warn(`Chat flow rate-limited; retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
-          await sleep(delay);
-          continue;
-        }
-
-        console.error('Error in answerFarmingQuestionsViaChatFlow:', error);
-        break;
-      }
+        return output as AnswerFarmingQuestionsOutput;
+      });
+    } catch (error: any) {
+      console.error('Error in answerFarmingQuestionsViaChatFlow:', error);
+      // Propagate error so the UI shows a proper error state instead of a fake "I'm busy" message
+      throw error;
     }
-
-    // Safe fallback so the UI keeps moving.
-    return {
-      answer: "I'm a bit busy right now. Please try again in a minute or contact your local Krishi Vigyan Kendra for urgent help."
-    };
   }
 );
 

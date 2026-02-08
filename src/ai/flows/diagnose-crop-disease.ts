@@ -4,7 +4,7 @@
  * - diagnoseCropDisease - Analyzes a crop image and provides a diagnosis.
  */
 
-import { ai } from '@/ai/genkit';
+import { ai, generateWithFallback, type GeminiModel } from '@/ai/genkit';
 import { z } from 'genkit';
 
 const DiagnoseCropInputSchema = z.object({
@@ -43,19 +43,17 @@ const diagnoseCropDiseaseFlow = ai.defineFlow(
   },
   async input => {
     try {
-      const { output } = await prompt(input);
-      if (!output) throw new Error('AI could not analyze the image.');
-      return output;
+      // Use generateWithFallback to automatically try different models on rate limits
+      // Fallback order: Gemini 3 Flash → 2.5 Flash → 2.5 Flash Lite
+      return await generateWithFallback(async (model: GeminiModel) => {
+        const { output } = await prompt(input, { model });
+        if (!output) throw new Error('AI could not analyze the image.');
+        return output as DiagnoseCropOutput;
+      });
     } catch (error) {
       console.error('Error in diagnoseCropDiseaseFlow:', error);
-      // Fallback for demo/error cases to prevent crash
-      return {
-        identification: 'Analysis Unavailable',
-        confidence: 0,
-        description: 'Unable to analyze image at this time due to service connectivity. Please ensure the image is clear and try again.',
-        organicTreatment: 'Consult a local expert.',
-        severity: 'Low' as const
-      };
+      // Propagate error so the UI shows a proper error state instead of a fake "Analysis Unavailable" message
+      throw error;
     }
   }
 );
